@@ -1,0 +1,43 @@
+# macOS
+.DS_Store
+*.swp
+
+# SwiftPM
+.build/
+**/.build/
+.swiftpm/
+**/.swiftpm/
+
+# JavaScript / Stream Deck tooling
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build and release artifacts
+dist/
+*.app/
+*.streamDeckPlugin
+*.zip
+*.dmg
+
+# Logs and local runtime output
+*.log
+logs/
+tmp/
+
+# Local generated Stream Deck frames.
+streamdeck-plugin/**/*.sdPlugin/frames/*.png
+streamdeck-plugin/**/*.sdPlugin/frames/*.webp
+streamdeck-plugin/**/*.sdPlugin/frames/*.gif
+streamdeck-plugin/**/*.sdPlugin/frames/status.json
+streamdeck-plugin/**/*.sdPlugin/frames/latest-data-url.txt
+
+# Source screen recordings copied locally before conversion.
+docs/assets/*.mov
+
+# Local config snapshots should not be committed if copied into the repo.
+config.env
+*.local
