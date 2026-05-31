@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 FRAMES_DIR="$ROOT/streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames"
 
 find "$ROOT" -name ".DS_Store" -type f -delete

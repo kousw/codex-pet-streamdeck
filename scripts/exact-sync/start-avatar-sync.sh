@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LABEL="com.kousw.codex-pet-avatar-sync"
 LAUNCH_AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs/codex-pet-streamdeck"
@@ -21,7 +21,7 @@ cat > "$LAUNCH_AGENT" <<PLIST
   <key>ProgramArguments</key>
   <array>
     <string>$NODE_BIN</string>
-    <string>$ROOT/scripts/sync-codex-avatar-frame.js</string>
+    <string>$ROOT/scripts/exact-sync/sync-codex-avatar-frame.js</string>
     <string>$PORT</string>
   </array>
   <key>RunAtLoad</key>

@@ -45,9 +45,8 @@ From the repository root:
 
 ```sh
 ./scripts/install.sh
-./scripts/request-screen-recording.sh
 ./scripts/start-helper.sh
-./scripts/open-menubar.sh
+./scripts/dev/open-menubar.sh
 ```
 
 `install.sh` builds the Swift app bundles, symlinks the Stream Deck plugin into Stream Deck's plugin folder, creates the user LaunchAgent, and writes the default config file. Keep the repository in a stable path after installing because the LaunchAgent points back to this checkout.
@@ -73,45 +72,41 @@ open streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/latest.png
 
 If `status.sh` reports `status: "ok"` and `latest.png` shows the pet, the capture helper is working. If the Stream Deck key still does not update, remove and re-add the `Live Pet` action and restart the Stream Deck app.
 
-Default `render-assets` mode does not need Screen Recording permission. If you
-switch to the `capture-overlay` fallback and macOS blocks capture, open:
+Default `render-assets` mode does not need Screen Recording permission. The old
+`capture-overlay` path is kept as a legacy fallback for development and visual
+comparison. If you switch to that mode and macOS blocks capture, open:
 
 ```text
 System Settings > Privacy & Security > Screen & System Audio Recording
 ```
 
-Grant access to the helper process if it appears there. If you are running the helper manually from Terminal, Ghostty, iTerm, Warp, or another shell, grant access to that shell app and restart it if macOS asks.
+Grant access to the helper process if it appears there. If you are running the
+helper manually from Terminal, Ghostty, iTerm, Warp, or another shell, grant
+access to that shell app and restart it if macOS asks.
 
 For the fallback installed path, grant access to `Codex Pet Capture`. It is generated under `dist/Codex Pet Capture.app` so macOS can show it as an app in the Screen Recording permission list.
 
-If you rebuild the app bundles, macOS may treat the ad-hoc signed helper as changed. Re-run `./scripts/request-screen-recording.sh`, toggle `Codex Pet Capture` off/on in Screen Recording settings if needed, then restart the helper.
-
-If `status.sh` still reports `screen-recording-denied` after granting access, reset the TCC entry for the capture helper:
+If `status.sh` still reports `screen-recording-denied` after granting access,
+reset the TCC entry for the capture helper:
 
 ```sh
 ./scripts/stop-helper.sh
 tccutil reset ScreenCapture com.kousw.codex-pet-capture
-./scripts/request-screen-recording.sh
 ```
 
-Then enable `Codex Pet Capture` again in Screen Recording settings and restart the helper. The same flow is wrapped by:
-
-```sh
-./scripts/reset-screen-recording.sh
-```
-
-During local development, avoid rebuilding `Codex Pet Capture.app` unless capture code changed. macOS ties Screen Recording permission to the helper app's code identity, and ad-hoc signed rebuilds can invalidate that permission. `build-apps.sh` preserves an unchanged app bundle so menu bar-only changes do not normally require granting Screen Recording again.
+Then enable `Codex Pet Capture` again in Screen Recording settings and restart
+the helper.
 
 When only the menu bar UI changed, build just that app:
 
 ```sh
-./scripts/build-apps.sh --menubar-only
+./scripts/dev/build-apps.sh --menubar-only
 ```
 
 Use the full build only when the capture helper changed:
 
 ```sh
-./scripts/build-apps.sh
+./scripts/dev/build-apps.sh
 ```
 
 ## Manual Test
@@ -164,15 +159,10 @@ streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/latest.png
 ./scripts/start-helper.sh
 ./scripts/stop-helper.sh
 ./scripts/status.sh
-./scripts/open-menubar.sh
-./scripts/request-screen-recording.sh
-./scripts/reset-screen-recording.sh
+./scripts/dev/open-menubar.sh
 ./scripts/set-fps.sh 10
 ./scripts/set-debug.sh 1
-./scripts/open-codex-debug.sh
-./scripts/start-avatar-sync.sh 9222
-./scripts/stop-avatar-sync.sh
-./scripts/clean-artifacts.sh
+./scripts/dev/clean-artifacts.sh
 ./scripts/uninstall.sh
 ```
 
@@ -202,14 +192,14 @@ from the Codex overlay's exact transient motion.
 For closer live sync, launch Codex with Electron remote debugging enabled:
 
 ```sh
-./scripts/open-codex-debug.sh
+./scripts/exact-sync/open-codex-debug.sh
 curl http://127.0.0.1:9222/json/version
 ```
 
 Then start the avatar sync bridge:
 
 ```sh
-./scripts/start-avatar-sync.sh 9222
+./scripts/exact-sync/start-avatar-sync.sh 9222
 ./scripts/stop-helper.sh
 ./scripts/start-helper.sh
 ```
@@ -236,7 +226,7 @@ and draws the small notification badge when the overlay exposes one.
 Limitations:
 
 - Codex must be launched with `--remote-debugging-port`; a normal Dock launch does not expose the live overlay DOM.
-- macOS Dock items cannot attach arbitrary launch arguments to an existing `.app`, so use `./scripts/open-codex-debug.sh` or an external launcher if you want debug-port startup.
+- macOS Dock items cannot attach arbitrary launch arguments to an existing `.app`, so use `./scripts/exact-sync/open-codex-debug.sh` or an external launcher if you want debug-port startup.
 - The DevTools bridge is local-only and talks to `127.0.0.1`, but remote debugging should still be treated as a development feature.
 - If the bridge stops or Codex restarts without the debug port, the helper falls back to the best-effort local state/session renderer.
 
@@ -245,8 +235,6 @@ The menu bar controller appears as `Codex Pet` in the macOS menu bar. It provide
 - helper start, stop, and restart
 - latest frame status
 - capture FPS presets
-- crop adjustment for pets that do not fit the default frame
-- a crop tuner window with an overlay preview and the resulting `144x144` Stream Deck frame
 - quick access to the frames and Stream Deck plugin folders
 - quick access to the config file
 - a best-effort `codex://` launcher
@@ -283,34 +271,9 @@ Set `DEBUG="1"` to keep per-frame helper logs in
 `~/Library/Logs/codex-pet-streamdeck/helper.log`. Leave it off for normal use,
 especially at `10fps`.
 
-The menu bar app can update FPS and capture fallback crop values, then restarts the helper so the change takes effect.
-
-For visual crop tuning in `capture-overlay` fallback mode, open:
-
-```text
-Codex Pet menu bar icon > Settings > Crop Tuner
-```
-
-Or open the tuner directly:
-
-```sh
-./scripts/open-crop-tuner.sh
-```
-
-The tuner shows the current overlay with a red crop rectangle and the resulting Stream Deck frame. Changing X/Y/Width/Height updates the preview. Press `Save & Restart Helper` when the frame looks right.
-
-You can also generate the same preview from the terminal:
-
-```sh
-./scripts/preview-crop.sh
-```
-
-It writes:
-
-```text
-streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/crop-preview.png
-streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/crop-frame.png
-```
+The menu bar app can update FPS, then restarts the helper so the change takes
+effect. Legacy `capture-overlay` crop controls remain in the menu bar app for
+development, but there are no top-level helper scripts for them.
 
 ## Troubleshooting
 

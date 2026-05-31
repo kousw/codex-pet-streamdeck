@@ -79,8 +79,9 @@ Example override file:
 }
 ```
 
-When `scripts/start-avatar-sync.sh` is running against a Codex Electron remote
-debugging port, the same file can contain a live sprite override:
+When `scripts/exact-sync/start-avatar-sync.sh` is running against a Codex
+Electron remote debugging port, the same file can contain a live sprite
+override:
 
 ```json
 {
@@ -122,19 +123,17 @@ System Settings -> Privacy & Security -> Screen & System Audio Recording
 
 Then enable the terminal app you are using. If it is already listed but still denied, toggle it off and on, then restart the terminal.
 
-For the packaged helper app, macOS can keep a stale TCC entry after ad-hoc signing changes. If `status.sh` reports `screen-recording-denied` even after enabling `Codex Pet Capture`, reset that entry:
+For the packaged helper app, macOS can keep a stale TCC entry after ad-hoc
+signing changes. If `status.sh` reports `screen-recording-denied` even after
+enabling `Codex Pet Capture`, reset that entry:
 
 ```sh
 ./scripts/stop-helper.sh
 tccutil reset ScreenCapture com.kousw.codex-pet-capture
-./scripts/request-screen-recording.sh
 ```
 
-Then enable `Codex Pet Capture` again in Screen Recording settings and restart the helper. The repository also provides:
-
-```sh
-./scripts/reset-screen-recording.sh
-```
+Then enable `Codex Pet Capture` again in Screen Recording settings and restart
+the helper.
 
 For the most stable permission behavior, build once and run the binary directly from the same terminal app:
 
@@ -287,17 +286,16 @@ frame per helper tick. Idle uses Codex's slow idle durations, and non-idle
 states play their row three times before returning to slow idle until the state
 changes.
 
-For exact overlay motion, launch Codex with `./scripts/open-codex-debug.sh` from
-the repository root, then run `./scripts/start-avatar-sync.sh 9222`. Without
-that debug bridge, state inference is best-effort.
+For exact overlay motion, launch Codex with
+`./scripts/exact-sync/open-codex-debug.sh` from the repository root, then run
+`./scripts/exact-sync/start-avatar-sync.sh 9222`. Without that debug bridge,
+state inference is best-effort.
 
-For visual tuning, open `Settings > Crop Tuner` from the menu bar app. It renders:
+For legacy capture visual tuning, open `Settings > Crop Tuner` from the menu bar
+app. It renders:
 
 - `crop-preview.png`: overlay snapshot with the active crop rectangle.
 - `crop-frame.png`: the resulting `144x144` Stream Deck frame.
 
-The same preview can be generated from the repository root:
-
-```sh
-./scripts/preview-crop.sh
-```
+The old command-line crop preview helper was removed to keep the public script
+surface smaller; use the menu bar tuner if you need the legacy capture fallback.

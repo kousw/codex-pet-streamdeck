@@ -27,4 +27,4 @@ This is a pre-publication checklist for the local preview.
 - Re-run a text scan for local paths and credentials.
 - Package signed/notarized release artifacts separately from source.
 - Keep generated `frames/`, `dist/`, logs, and local config out of source control.
-- Run `./scripts/clean-artifacts.sh` before creating a source archive if local runtime frames were generated.
+- Run `./scripts/dev/clean-artifacts.sh` before creating a source archive if local runtime frames were generated.

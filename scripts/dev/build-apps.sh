@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DIST="$ROOT/dist"
 CAPTURE_APP="$DIST/Codex Pet Capture.app"
 MENUBAR_APP="$DIST/Codex Pet.app"
@@ -20,7 +20,7 @@ case "$BUILD_MODE" in
     swift build -c release --package-path "$ROOT/capture-macos" --product codex-pet-capture
     ;;
   *)
-    echo "Usage: ./scripts/build-apps.sh [--menubar-only|--capture-only]"
+    echo "Usage: ./scripts/dev/build-apps.sh [--menubar-only|--capture-only]"
     exit 1
     ;;
 esac
