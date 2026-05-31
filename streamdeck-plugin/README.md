@@ -1,6 +1,6 @@
 # Stream Deck Plugin
 
-Minimal Stream Deck plugin for displaying the frame written by the macOS capture helper.
+Minimal Stream Deck plugin for displaying the frame written by the renderer helper.
 
 The plugin consumes `com.kousw.codex-pet.sdPlugin/frames/latest-data-url.txt`. It does not perform macOS capture directly.
 
@@ -22,21 +22,20 @@ The recommended path is the repository-level installer:
 ../scripts/install.sh
 ```
 
-It builds the macOS helper apps, installs the LaunchAgent, and symlinks `com.kousw.codex-pet.sdPlugin` into:
+It builds the Rust renderer, installs the LaunchAgent, and symlinks `com.kousw.codex-pet.sdPlugin` into:
 
 ```text
 ~/Library/Application Support/com.elgato.StreamDeck/Plugins/
 ```
 
-Then restart Stream Deck. If you only want to work on the plugin, copying or symlinking `com.kousw.codex-pet.sdPlugin` into that folder is also enough, but the key will not show live frames until the capture helper is running.
+Then restart Stream Deck. If you only want to work on the plugin, copying or symlinking `com.kousw.codex-pet.sdPlugin` into that folder is also enough, but the key will not show live frames until the renderer helper is running.
 
 ## Try It
 
 Start the asset renderer:
 
 ```sh
-cd ../capture-macos
-swift run codex-pet-capture --render-assets --pet-state idle --fps 10 --output-dir ../streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames
+cargo run --manifest-path ../renderer-rust/Cargo.toml -- --pet-state idle --fps 10 --output-dir com.kousw.codex-pet.sdPlugin/frames
 ```
 
 In Stream Deck, add the `Codex -> Live Pet` action to a key.

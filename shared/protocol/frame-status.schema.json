@@ -60,7 +60,7 @@
     },
     "stateSource": {
       "type": "string",
-      "enum": ["cli", "override-file", "codex-session", "default"]
+      "enum": ["cli", "override-file", "codex-session", "codex-debug-overlay", "default"]
     },
     "petID": {
       "type": "string"

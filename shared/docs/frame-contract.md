@@ -51,7 +51,7 @@ The publisher rotates through `frame-0.png` to `frame-7.png` for consumers that 
 - `crop`: the configured pet crop rectangle in reference overlay coordinates.
 
 The asset-renderer path should also write `renderFPS`, `source`, `stateSource`,
-`petId`, `petState`, and optionally `notificationBadgeCount`. During migration
+`petID`, `petState`, and optionally `notificationBadgeCount`. During migration
 it should keep writing `captureFPS` for compatibility with the current plugin.
 
 ## Status Values

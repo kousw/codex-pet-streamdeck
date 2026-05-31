@@ -2,7 +2,7 @@
 
 The top-level scripts are the normal local-development surface:
 
-- `install.sh`: build helper apps, install the Stream Deck plugin symlink, and write the LaunchAgent.
+- `install.sh`: build the Rust renderer, install the Stream Deck plugin symlink, and write the LaunchAgent.
 - `start-helper.sh` / `stop-helper.sh`: manage the asset-renderer helper.
 - `status.sh`: inspect config, helper state, latest frame status, and recent errors.
 - `set-fps.sh` / `set-debug.sh`: update helper config and restart manually.
@@ -10,7 +10,7 @@ The top-level scripts are the normal local-development surface:
 
 `dev/` contains commands that are useful while hacking on this repository:
 
-- `dev/build-apps.sh`: build the helper app bundles.
+- `dev/build-apps.sh`: build the legacy Swift helper app bundles.
 - `dev/open-menubar.sh`: launch the menu bar controller from the local build.
 - `dev/clean-artifacts.sh`: remove ignored local frame/build artifacts.
 

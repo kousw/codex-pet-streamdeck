@@ -16,7 +16,7 @@ fi
 echo
 
 echo "Helper status:"
-launchctl print "gui/$UID/com.kousw.codex-pet-capture" 2>/dev/null | sed -n '1,80p' || echo "  not loaded"
+launchctl print "gui/$UID/com.kousw.codex-pet-renderer" 2>/dev/null | sed -n '1,80p' || echo "  not loaded"
 
 echo
 echo "Frame status:"

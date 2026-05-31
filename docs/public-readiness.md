@@ -6,7 +6,7 @@ This document tracks the gap between the current local preview and a project tha
 
 ```mermaid
 flowchart LR
-  CodexState["Codex local state"] --> Helper["Swift pet helper"]
+  CodexState["Codex local state"] --> Helper["Rust pet renderer"]
   PetAssets["Codex pet spritesheet"] --> Helper
   CodexDebug["Codex DevTools port (optional)"] -. exact frame/badge .-> Helper
   Codex["Codex desktop app"] -. fallback .-> Overlay["Pet overlay window"]
@@ -18,7 +18,7 @@ flowchart LR
   Menu --> Frames
 ```
 
-The helper runs as a user LaunchAgent and writes frames into the plugin bundle.
+The Rust renderer runs as a user LaunchAgent and writes frames into the plugin bundle.
 The default mode renders frames from Codex pet spritesheets and best-effort
 local state. If Codex is launched with an Electron remote debugging port, an
 optional local Node bridge can read the live overlay sprite row/column and
@@ -37,7 +37,7 @@ Screen Recording permission, crop tuning, and overlay position drift.
 
 The Stream Deck SDK does not reliably play a live animated source through one static image assignment. The plugin therefore sends updated still frames. In asset-renderer mode, `10fps` is the fidelity default because Codex's shortest avatar frame is `110ms`; users can lower it if hardware or battery cost matters more than motion fidelity.
 
-The helper still keeps a CoreGraphics capture fallback for pixel-level overlay
+The legacy Swift helper still keeps a CoreGraphics capture fallback for pixel-level overlay
 mirroring. ScreenCaptureKit is the better capture API, but repeated one-shot
 `SCScreenshotManager` captures were unstable during testing. A real `SCStream`
 implementation is the right future fallback if exact overlay mirroring remains
@@ -45,7 +45,7 @@ important.
 
 ## Public Release Gaps
 
-- Packaging: ship signed `.app` bundles and a Stream Deck plugin bundle instead of asking users to build with Swift.
+- Packaging: ship a Rust renderer binary and a Stream Deck plugin bundle instead of asking users to build from source.
 - Permissions: default rendering does not need Screen Recording. The fallback `Codex Pet Capture.app` still exists so macOS can show a stable app in Screen Recording settings when capture is enabled.
 - Capture API: keep repeated CoreGraphics snapshots as a fallback or replace them with an `SCStream` window capture path once implemented and tested.
 - Plugin transport: move from file polling to a push channel if higher frame rates are required.
@@ -65,8 +65,8 @@ The current frame is `144x144` PNG encoded as a data URL. The helper writes it a
 
 ## Local Release Checklist
 
-- `swift build -c release --package-path capture-macos` succeeds.
-- `codex-pet-capture --render-assets --duration 3` writes `source: "asset-renderer"` status.
+- `cargo build --release --manifest-path renderer-rust/Cargo.toml` succeeds.
+- `codex-pet-renderer --duration 3` writes `source: "asset-renderer"` status.
 - `./scripts/install.sh` installs the plugin symlink and LaunchAgent.
 - `./scripts/start-helper.sh` starts the helper.
 - `frames/status.json` reports `status: "ok"` with `source: "asset-renderer"`.

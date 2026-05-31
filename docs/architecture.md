@@ -24,7 +24,7 @@ Codex local state + pet spritesheet -> asset renderer -> frame transport -> Stre
 For exact live motion, an optional local DevTools bridge can read the Codex
 overlay's current sprite row/column and notification badge count when Codex is
 launched with `--remote-debugging-port`. That bridge writes the same
-`~/.codex/pet-streamdeck-state.json` override consumed by the Swift renderer.
+`~/.codex/pet-streamdeck-state.json` override consumed by the Rust renderer.
 
 See [Asset renderer migration](asset-renderer-migration.md). That plan is
 informed by [lkuczborski/WatchPet](https://github.com/lkuczborski/WatchPet),
@@ -38,16 +38,34 @@ The important design choice is to keep the capture implementation, frame deliver
 - Render local pet assets by default; use capture only as a fallback for exact rendered output.
 - Keep Codex app internals as diagnostics only; DOM selectors and bundle filenames are not stable APIs.
 - Treat Electron remote-debugging sync as an optional developer feature, not as the default public path.
-- Make the capture helper independently runnable and debuggable.
+- Make the renderer helper independently runnable and debuggable.
 - Make the Stream Deck plugin consume frames through a narrow interface.
 - Prefer replaceable transport over tightly coupling the plugin to the capture implementation.
 - Start with conservative frame rates and explicit failure states.
 
 ## Components
 
+### `renderer-rust`
+
+Owns cross-platform pet asset rendering.
+
+Responsibilities:
+
+- Discover Codex-compatible custom pets from `CODEX_HOME` or `~/.codex/pets`.
+- Render `pet.json` + `spritesheet.webp` into Stream Deck-ready `144x144` PNG frames.
+- Infer best-effort Codex activity state from local session logs.
+- Consume optional exact-sync overrides from `~/.codex/pet-streamdeck-state.json`.
+- Publish `latest.png`, `latest-data-url.txt`, rotating frame slots, and `status.json`.
+- Optionally serve the latest frame/status over a local HTTP API for future adapters.
+
+Non-responsibilities:
+
+- It should not depend on Stream Deck SDK types.
+- It should not own macOS window capture.
+
 ### `capture-macos`
 
-Owns all macOS-specific capture work.
+Owns legacy macOS-specific capture work.
 
 Responsibilities:
 
@@ -66,9 +84,9 @@ Non-responsibilities:
 
 Recommended implementation:
 
-- Swift command-line helper.
-- ScreenCaptureKit for the durable capture path.
-- CoreGraphics only as an early probe if it speeds up window enumeration and one-shot screenshots.
+- Swift command-line helper for `capture-overlay` fallback only.
+- ScreenCaptureKit for the durable capture path if fallback capture is revived.
+- CoreGraphics only as a probe or conservative fallback.
 
 The current helper follows that split: window discovery is lightweight, and any CoreGraphics snapshot is explicitly a one-shot validation path rather than the steady-state capture engine.
 
@@ -88,7 +106,7 @@ Non-responsibilities:
 
 - It should not implement macOS capture directly.
 - It should not depend on Codex app internals.
-- It should not perform expensive image processing per key if the capture helper can prepare the frame.
+- It should not perform expensive image processing per key if the renderer helper can prepare the frame.
 
 Recommended implementation:
 
@@ -257,11 +275,11 @@ docs/
 
 Recommended order:
 
-1. `capture-macos`: asset renderer mode that loads Codex-compatible pet spritesheets.
-2. `capture-macos`: best-effort Codex state inference and explicit `PET_STATE` override.
-3. `capture-macos`: atomic `latest-data-url.txt`, `latest.png`, and `status.json` writer.
+1. `renderer-rust`: asset renderer mode that loads Codex-compatible pet spritesheets.
+2. `renderer-rust`: best-effort Codex state inference and explicit `PET_STATE` override.
+3. `renderer-rust`: atomic `latest-data-url.txt`, `latest.png`, and `status.json` writer.
 4. `streamdeck-plugin`: data URL reader and `setImage` action.
-5. `Codex Pet` menu bar app: helper lifecycle, FPS presets, config access, and fallback crop tuning.
+5. Optional `Codex Pet` menu bar app: helper lifecycle, FPS presets, config access, and fallback crop tuning.
 6. `capture-overlay`: retained as an explicit fallback for pixel-level overlay mirroring.
 7. Package signed helper apps and `.streamDeckPlugin` artifacts for public releases.
 8. Replace temp-file polling with a push channel only if hardware testing shows it is needed.
@@ -270,7 +288,7 @@ Recommended order:
 
 The architecture is good, with one adjustment: do not let the Stream Deck plugin own rendering or capture. Make the native helper responsible for producing a finished `144x144` frame and keep the plugin as a small Stream Deck adapter.
 
-The default helper now renders pet assets locally, which removes the riskiest capture-path concerns from normal use. The capture path remains useful as a fallback when exact rendered overlay mirroring matters.
+The default Rust helper now renders pet assets locally, which removes the riskiest capture-path concerns from normal use. The capture path remains useful as a fallback when exact rendered overlay mirroring matters.
 
 Performance adjustment: temp-file data URL polling is acceptable for the current `144x144` renderer because writes are atomic and the plugin skips duplicate payloads. Move steady-state frame delivery to a local push channel only after measuring a real Stream Deck bottleneck.
 

@@ -60,7 +60,7 @@ Important flags:
 
 - `--pet-id <id>`: optional custom pet id. Accepts `example` or `custom:example`.
 - `--pet-state <state>`: optional fixed state. Supports `idle`, `running`, `waiting`, `failed`, and `review`.
-- `--fps <number>`: clamped to `1...15`; default is `10` in the installed asset-renderer helper.
+- `--fps <number>`: clamped to `1...15`; default is `10` when this legacy Swift renderer is used.
 - `--retry-interval <seconds>`: delay before retrying if assets cannot be resolved; default is `2`.
 - `--duration <seconds>`: optional bounded run for tests.
 
@@ -271,8 +271,9 @@ CROP_WIDTH="89"
 CROP_HEIGHT="89"
 ```
 
-`HELPER_MODE` defaults to `render-assets`. Set it to `capture-overlay` to use
-the old capture fallback.
+The default installed renderer is Rust. Set `RENDERER_ENGINE="swift"` to compare
+against this legacy Swift asset renderer, or set `HELPER_MODE="capture-overlay"`
+to use the old capture fallback.
 
 The menu bar app exposes FPS presets and fallback crop tuning. Use `Open Config File` for arbitrary values.
 

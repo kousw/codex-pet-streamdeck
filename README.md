@@ -19,8 +19,7 @@ overlay.
 This is usable as a local preview, but it is not packaged as a polished public release yet.
 
 - Works on macOS with the Codex desktop app and Elgato Stream Deck.
-- Uses a native Swift helper for local pet rendering.
-- Includes an experimental Rust renderer daemon intended to become the cross-platform rendering core.
+- Uses a Rust renderer daemon for local pet rendering.
 - Uses a Stream Deck SDK plugin for display.
 - Defaults to `10fps` in asset-renderer mode so the Stream Deck samples Codex's shortest pet animation frames closely. The Stream Deck plugin reads the helper's `status.json` and automatically adjusts its polling interval to the configured FPS.
 - Does not require macOS Screen Recording permission in the default `render-assets` mode.
@@ -32,8 +31,7 @@ The asset renderer migration plan is documented in
 
 ## Renderer Direction
 
-The current installed path still uses the Swift helper. The new
-`renderer-rust/` prototype is the candidate cross-platform renderer core:
+The installed path now uses `renderer-rust/` as the rendering core:
 
 - it renders Codex-compatible `pet.json` + `spritesheet.webp` assets;
 - it writes the same `latest.png`, `latest-data-url.txt`, and `status.json`
@@ -41,15 +39,18 @@ The current installed path still uses the Swift helper. The new
 - it can also expose local HTTP endpoints for future display adapters.
 
 Stream Deck should remain a display adapter, not the owner of rendering.
+The old Swift helper remains available only for macOS `capture-overlay`
+fallback experiments.
 
 ## Requirements
 
 - macOS 14 or newer.
-- Swift 6 toolchain.
+- Rust toolchain.
 - Codex desktop app.
 - Elgato Stream Deck app 6.5 or newer.
 - A Codex-compatible custom pet under `~/.codex/pets/<pet-id>` for the current default renderer.
 - macOS Screen Recording permission only if you enable the `capture-overlay` fallback.
+- Optional: Swift 6 toolchain only if you use the legacy `capture-overlay` fallback.
 - Optional: Codex launched with `--remote-debugging-port=9222` for exact live frame and notification badge sync.
 
 ## Build From Source
@@ -59,19 +60,17 @@ From the repository root:
 ```sh
 ./scripts/install.sh
 ./scripts/start-helper.sh
-./scripts/dev/open-menubar.sh
 ```
 
-`install.sh` builds the Swift app bundles, symlinks the Stream Deck plugin into Stream Deck's plugin folder, creates the user LaunchAgent, and writes the default config file. Keep the repository in a stable path after installing because the LaunchAgent points back to this checkout.
+`install.sh` builds the Rust renderer, symlinks the Stream Deck plugin into Stream Deck's plugin folder, creates the user LaunchAgent, and writes the default config file. Keep the repository in a stable path after installing because the LaunchAgent points back to this checkout.
 
-Then restart the Stream Deck app and add `Codex > Live Pet` to a key. The menu bar controller can start, stop, restart, tune crop, and inspect the helper without returning to a terminal.
+Then restart the Stream Deck app and add `Codex > Live Pet` to a key.
 
 Expected local artifacts:
 
 ```text
-dist/Codex Pet Capture.app
-dist/Codex Pet.app
-~/Library/LaunchAgents/com.kousw.codex-pet-capture.plist
+renderer-rust/target/release/codex-pet-renderer
+~/Library/LaunchAgents/com.kousw.codex-pet-renderer.plist
 ~/Library/Application Support/Codex Pet StreamDeck/config.env
 ~/Library/Application Support/com.elgato.StreamDeck/Plugins/com.kousw.codex-pet.sdPlugin
 ```
@@ -83,7 +82,7 @@ To verify capture before debugging Stream Deck, run:
 open streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/latest.png
 ```
 
-If `status.sh` reports `status: "ok"` and `latest.png` shows the pet, the capture helper is working. If the Stream Deck key still does not update, remove and re-add the `Live Pet` action and restart the Stream Deck app.
+If `status.sh` reports `status: "ok"` and `latest.png` shows the pet, the renderer is working. If the Stream Deck key still does not update, remove and re-add the `Live Pet` action and restart the Stream Deck app.
 
 Default `render-assets` mode does not need Screen Recording permission. The old
 `capture-overlay` path is kept as a legacy fallback for development and visual
@@ -110,31 +109,25 @@ tccutil reset ScreenCapture com.kousw.codex-pet-capture
 Then enable `Codex Pet Capture` again in Screen Recording settings and restart
 the helper.
 
-When only the menu bar UI changed, build just that app:
+The following Swift build commands are only needed for the legacy menu bar and
+`capture-overlay` fallback:
 
 ```sh
 ./scripts/dev/build-apps.sh --menubar-only
-```
-
-Use the full build only when the capture helper changed:
-
-```sh
 ./scripts/dev/build-apps.sh
 ```
 
 ## Manual Test
 
-Run the default asset renderer directly for a short test:
+Run the default Rust asset renderer directly for a short test:
 
 ```sh
-cd capture-macos
-swift run codex-pet-capture \
-  --render-assets \
+cargo run --manifest-path renderer-rust/Cargo.toml -- \
   --pet-id <pet-id> \
   --pet-state idle \
   --fps 10 \
   --duration 3 \
-  --output-dir ../streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames
+  --output-dir streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames
 ```
 
 The generated frame should appear at:
@@ -264,6 +257,7 @@ Supported settings:
 FPS="10"
 RETRY_INTERVAL="2"
 HELPER_MODE="render-assets"
+RENDERER_ENGINE="rust"
 DEBUG="0"
 PET_ID=""
 PET_STATE=""
@@ -276,7 +270,8 @@ CROP_HEIGHT="89"
 ```
 
 `FPS` is clamped to `1...15`. `HELPER_MODE` supports `render-assets` and
-`capture-overlay`. `PET_ID` and `PET_STATE` are optional renderer overrides;
+`capture-overlay`. `RENDERER_ENGINE` defaults to `rust`; set it to `swift` only
+for comparing against the old asset renderer. `PET_ID` and `PET_STATE` are optional renderer overrides;
 leave them empty for best-effort auto detection. `PET_STATE` may be `idle`,
 `running`, `waiting`, `failed`, or `review`.
 
@@ -300,11 +295,12 @@ If frames stop updating, run:
 
 Common causes are missing custom pet assets, stale status output, or the Stream Deck app needing a restart after plugin changes. In `capture-overlay` fallback mode, missing Screen Recording permission or a hidden Codex overlay can also stop updates.
 
-If the pet is visible in `latest.png` but not on the key, the capture helper is working and the issue is likely in the Stream Deck plugin/runtime side.
+If the pet is visible in `latest.png` but not on the key, the renderer is working and the issue is likely in the Stream Deck plugin/runtime side.
 
 ## Project Layout
 
-- `capture-macos/`: native Swift capture helper.
+- `renderer-rust/`: Rust renderer daemon used by the default install path.
+- `capture-macos/`: legacy Swift capture helper and menu bar utility.
 - `streamdeck-plugin/`: Stream Deck plugin.
 - `shared/`: frame/status contract.
 - `docs/`: research, architecture, and release notes.

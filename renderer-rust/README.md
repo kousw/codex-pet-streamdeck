@@ -1,10 +1,10 @@
 # Codex Pet Renderer
 
-Experimental Rust renderer daemon for Codex-compatible pet spritesheets.
+Rust renderer daemon for Codex-compatible pet spritesheets.
 
-This is the candidate cross-platform replacement for the current Swift
-asset-renderer helper. It keeps the existing Stream Deck frame contract so the
-Stream Deck plugin can remain a small display adapter.
+This is the default renderer used by the local LaunchAgent. It keeps the
+existing Stream Deck frame contract so the Stream Deck plugin can remain a small
+display adapter.
 
 ## Run
 
@@ -44,12 +44,12 @@ Implemented:
 - custom pet discovery from `CODEX_HOME` or `~/.codex/pets`
 - `pet.json` + `spritesheet.webp`
 - Codex `8 x 9` timeline-compatible sprite animation
+- best-effort Codex activity inference from local session logs
+- exact sprite row/column and notification badge overrides from
+  `~/.codex/pet-streamdeck-state.json`
 - existing file-based Stream Deck frame contract
 - optional HTTP read API
 
 Not implemented yet:
 
-- Codex activity inference
-- exact Electron debug-port sync
-- install/start/status packaging
 - Windows startup integration

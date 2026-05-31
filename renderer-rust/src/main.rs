@@ -4,12 +4,13 @@ use image::imageops::{FilterType, overlay, resize};
 use image::{ColorType, DynamicImage, ImageBuffer, ImageEncoder, Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::fs;
+use std::fs::{self, File};
 use std::io::Cursor;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 use tiny_http::{Header, Response, Server, StatusCode};
@@ -82,6 +83,20 @@ struct ResolvedPet {
 }
 
 #[derive(Clone, Copy, Debug)]
+struct SpriteFrameOverride {
+    row: u32,
+    column: u32,
+}
+
+#[derive(Clone, Debug)]
+struct ActivityState {
+    state: PetAnimationState,
+    source: String,
+    sprite_frame_override: Option<SpriteFrameOverride>,
+    notification_badge_count: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug)]
 struct TimelineFrame {
     row: u32,
     column: u32,
@@ -94,23 +109,38 @@ struct RenderStatus {
     version: u32,
     status: String,
     source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     state_source: Option<String>,
     updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frame_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frame_sequence: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frame_slot: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frame_data_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     capture_mode: Option<String>,
     #[serde(rename = "captureFPS")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     capture_fps: Option<f64>,
     #[serde(rename = "renderFPS")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     render_fps: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     crop: Option<serde_json::Value>,
     #[serde(rename = "targetWindowID")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     target_window_id: Option<u32>,
+    #[serde(rename = "petID")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pet_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pet_state: Option<PetAnimationState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     notification_badge_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
 }
 
@@ -266,8 +296,10 @@ fn publish_frame(
     animation_started_at: &mut Instant,
     shared: Arc<Mutex<SharedFrame>>,
 ) -> Result<()> {
-    let pet = resolve_pet(config.pet_id.as_deref())?;
-    let state = config.pet_state.unwrap_or(PetAnimationState::Idle);
+    let codex_home = codex_home();
+    let pet = resolve_pet(config.pet_id.as_deref(), &codex_home)?;
+    let activity = resolve_activity_state(config.pet_state, &codex_home);
+    let state = activity.state;
     let key = format!("{}:{}", pet.id, state.as_str());
     if *animation_key != key {
         *animation_key = key;
@@ -275,8 +307,19 @@ fn publish_frame(
     }
 
     let elapsed_ms = animation_started_at.elapsed().as_millis() as u64;
-    let sprite = timeline_frame(state, elapsed_ms);
-    let image = render_sprite_frame(&pet.spritesheet_path, sprite, None)?;
+    let sprite = activity
+        .sprite_frame_override
+        .map(|frame| TimelineFrame {
+            row: frame.row,
+            column: frame.column,
+            duration_ms: 0,
+        })
+        .unwrap_or_else(|| timeline_frame(state, elapsed_ms));
+    let image = render_sprite_frame(
+        &pet.spritesheet_path,
+        sprite,
+        activity.notification_badge_count,
+    )?;
     let png = encode_png(&image)?;
     let data_url = format!(
         "data:image/png;base64,{}",
@@ -297,7 +340,7 @@ fn publish_frame(
         version: 2,
         status: "ok".to_string(),
         source: "asset-renderer".to_string(),
-        state_source: Some("default".to_string()),
+        state_source: Some(activity.source.clone()),
         updated_at: iso8601_now(),
         frame_path: Some(slot_path.to_string_lossy().to_string()),
         frame_sequence: Some(sequence),
@@ -310,7 +353,7 @@ fn publish_frame(
         target_window_id: None,
         pet_id: Some(pet.id.clone()),
         pet_state: Some(state),
-        notification_badge_count: None,
+        notification_badge_count: activity.notification_badge_count,
         message: None,
     };
     let status_json = serde_json::to_string_pretty(&status)?;
@@ -325,9 +368,10 @@ fn publish_frame(
 
     if config.debug {
         println!(
-            "render frame {sequence} slot={slot} pet={} state={} row={} col={} -> {}",
+            "render frame {sequence} slot={slot} pet={} state={} source={} row={} col={} -> {}",
             pet.id,
             state.as_str(),
+            activity.source,
             sprite.row,
             sprite.column,
             slot_path.display()
@@ -375,13 +419,14 @@ fn write_error_status(
     Ok(())
 }
 
-fn resolve_pet(preferred_id: Option<&str>) -> Result<ResolvedPet> {
-    let codex_home = env::var_os("CODEX_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home_dir().join(".codex"));
+fn resolve_pet(preferred_id: Option<&str>, codex_home: &Path) -> Result<ResolvedPet> {
     let pets_dir = codex_home.join("pets");
+    let selected_id = preferred_id
+        .map(str::to_string)
+        .or_else(|| override_pet_id(codex_home))
+        .or_else(|| persisted_custom_pet_id(codex_home));
 
-    if let Some(id) = preferred_id {
+    if let Some(id) = selected_id.as_deref() {
         return resolve_pet_dir(&pets_dir, normalize_pet_id(id))
             .ok_or_else(|| format!("No Codex custom pet found for {id}.").into());
     }
@@ -399,6 +444,12 @@ fn resolve_pet(preferred_id: Option<&str>) -> Result<ResolvedPet> {
     }
 
     Err("No Codex custom pet found.".into())
+}
+
+fn codex_home() -> PathBuf {
+    env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home_dir().join(".codex"))
 }
 
 fn resolve_pet_dir(pets_dir: &Path, id: &str) -> Option<ResolvedPet> {
@@ -428,6 +479,232 @@ fn resolve_pet_dir(pets_dir: &Path, id: &str) -> Option<ResolvedPet> {
 
 fn normalize_pet_id(value: &str) -> &str {
     value.strip_prefix("custom:").unwrap_or(value)
+}
+
+fn override_pet_id(codex_home: &Path) -> Option<String> {
+    let value = read_json(codex_home.join("pet-streamdeck-state.json")).ok()?;
+    value
+        .get("petId")
+        .and_then(serde_json::Value::as_str)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+}
+
+fn persisted_custom_pet_id(codex_home: &Path) -> Option<String> {
+    let value = read_json(codex_home.join(".codex-global-state.json")).ok()?;
+    let persisted = value.get("electron-persisted-atom-state")?.as_object()?;
+
+    for (key, value) in persisted {
+        let key = key.to_ascii_lowercase();
+        if !key.contains("pet") && !key.contains("avatar") {
+            continue;
+        }
+
+        if let Some(string) = value.as_str().filter(|value| value.starts_with("custom:")) {
+            return Some(string.to_string());
+        }
+
+        if let Some(strings) = value.as_array() {
+            for string in strings
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .filter(|value| value.starts_with("custom:"))
+            {
+                return Some(string.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_activity_state(
+    explicit_state: Option<PetAnimationState>,
+    codex_home: &Path,
+) -> ActivityState {
+    if let Some(state) = explicit_state {
+        return ActivityState {
+            state,
+            source: "cli".to_string(),
+            sprite_frame_override: None,
+            notification_badge_count: None,
+        };
+    }
+
+    if let Some(activity) = override_activity_state(codex_home) {
+        return activity;
+    }
+
+    if let Some(activity) = infer_activity_from_recent_session(codex_home) {
+        return activity;
+    }
+
+    ActivityState {
+        state: PetAnimationState::Idle,
+        source: "default".to_string(),
+        sprite_frame_override: None,
+        notification_badge_count: None,
+    }
+}
+
+fn override_activity_state(codex_home: &Path) -> Option<ActivityState> {
+    let value = read_json(codex_home.join("pet-streamdeck-state.json")).ok()?;
+    let frame_override = fresh_sprite_frame_override(&value);
+    let state = value
+        .get("state")
+        .and_then(serde_json::Value::as_str)
+        .and_then(PetAnimationState::parse)
+        .or_else(|| frame_override.map(|frame| state_for_sprite_row(frame.row)))?;
+
+    let notification_badge_count = if frame_override.is_some() {
+        value
+            .get("notificationBadgeCount")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|count| *count > 0)
+            .map(|count| count.min(99) as u32)
+    } else {
+        None
+    };
+
+    Some(ActivityState {
+        state,
+        source: if frame_override.is_some() {
+            "codex-debug-overlay"
+        } else {
+            "override-file"
+        }
+        .to_string(),
+        sprite_frame_override: frame_override,
+        notification_badge_count,
+    })
+}
+
+fn fresh_sprite_frame_override(value: &serde_json::Value) -> Option<SpriteFrameOverride> {
+    let source = value.get("source")?.as_str()?;
+    if source != "codex-debug-overlay" {
+        return None;
+    }
+
+    let updated_at = value.get("updatedAt")?.as_str()?;
+    let updated_at = OffsetDateTime::parse(updated_at, &Rfc3339).ok()?;
+    if (OffsetDateTime::now_utc() - updated_at).whole_seconds() >= 2 {
+        return None;
+    }
+
+    let row = value.get("spriteRow")?.as_u64()? as u32;
+    let column = value.get("spriteColumn")?.as_u64()? as u32;
+    if row >= ROWS || column >= COLUMNS {
+        return None;
+    }
+
+    Some(SpriteFrameOverride { row, column })
+}
+
+fn state_for_sprite_row(row: u32) -> PetAnimationState {
+    match row {
+        5 => PetAnimationState::Failed,
+        6 => PetAnimationState::Waiting,
+        7 => PetAnimationState::Running,
+        8 => PetAnimationState::Review,
+        _ => PetAnimationState::Idle,
+    }
+}
+
+fn infer_activity_from_recent_session(codex_home: &Path) -> Option<ActivityState> {
+    let session = newest_jsonl_file(&codex_home.join("sessions"))?;
+    let tail = read_tail(&session, 128 * 1024).ok()?.to_ascii_lowercase();
+
+    for line in tail.lines().rev() {
+        let state =
+            if line.contains("\"type\":\"event_msg\"") && line.contains("\"type\":\"error\"") {
+                Some(PetAnimationState::Failed)
+            } else if line.contains("approval_request") || line.contains("request_user_input") {
+                Some(PetAnimationState::Waiting)
+            } else if line.contains("\"type\":\"task_complete\"")
+                || line.contains("\"phase\":\"final_answer\"")
+            {
+                Some(PetAnimationState::Review)
+            } else if line.contains("\"type\":\"task_started\"")
+                || line.contains("\"type\":\"function_call\"")
+            {
+                Some(PetAnimationState::Running)
+            } else {
+                None
+            };
+
+        if let Some(state) = state {
+            return Some(ActivityState {
+                state,
+                source: "codex-session".to_string(),
+                sprite_frame_override: None,
+                notification_badge_count: None,
+            });
+        }
+    }
+
+    Some(ActivityState {
+        state: PetAnimationState::Idle,
+        source: "codex-session".to_string(),
+        sprite_frame_override: None,
+        notification_badge_count: None,
+    })
+}
+
+fn newest_jsonl_file(directory: &Path) -> Option<PathBuf> {
+    let mut newest: Option<(PathBuf, SystemTime)> = None;
+    visit_files(directory, &mut |path| {
+        if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+            return;
+        }
+        let Ok(metadata) = fs::metadata(path) else {
+            return;
+        };
+        if !metadata.is_file() {
+            return;
+        }
+        let Ok(modified) = metadata.modified() else {
+            return;
+        };
+        if newest
+            .as_ref()
+            .is_none_or(|(_, newest_modified)| modified > *newest_modified)
+        {
+            newest = Some((path.to_path_buf(), modified));
+        }
+    });
+    newest.map(|(path, _)| path)
+}
+
+fn visit_files(directory: &Path, visitor: &mut impl FnMut(&Path)) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.filter_map(std::result::Result::ok) {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            visit_files(&path, visitor);
+        } else if file_type.is_file() {
+            visitor(&path);
+        }
+    }
+}
+
+fn read_tail(path: &Path, max_bytes: u64) -> Result<String> {
+    let mut file = File::open(path)?;
+    let size = file.seek(SeekFrom::End(0))?;
+    let offset = size.saturating_sub(max_bytes);
+    file.seek(SeekFrom::Start(offset))?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    Ok(text)
+}
+
+fn read_json(path: impl AsRef<Path>) -> Result<serde_json::Value> {
+    let text = fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&text)?)
 }
 
 fn home_dir() -> PathBuf {
@@ -693,4 +970,53 @@ fn binary_response(body: Vec<u8>, content_type: &'static str) -> Response<Cursor
         Header::from_bytes(&b"Content-Type"[..], content_type.as_bytes())
             .expect("valid content type header"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timeline_uses_codex_review_row_before_returning_to_idle() {
+        let first = timeline_frame(PetAnimationState::Review, 0);
+        assert_eq!(first.row, 8);
+        assert_eq!(first.column, 0);
+
+        let later = timeline_frame(PetAnimationState::Review, 500);
+        assert_eq!(later.row, 8);
+
+        let after_intro = timeline_frame(PetAnimationState::Review, 4_000);
+        assert_eq!(after_intro.row, 0);
+    }
+
+    #[test]
+    fn status_uses_existing_frame_contract_field_names() {
+        let status = RenderStatus {
+            version: 2,
+            status: "ok".to_string(),
+            source: "asset-renderer".to_string(),
+            state_source: Some("codex-debug-overlay".to_string()),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+            frame_path: Some("/tmp/frame-0.png".to_string()),
+            frame_sequence: Some(1),
+            frame_slot: Some(1),
+            frame_data_path: Some("/tmp/latest-data-url.txt".to_string()),
+            capture_mode: Some("render-assets".to_string()),
+            capture_fps: Some(10.0),
+            render_fps: Some(10.0),
+            crop: None,
+            target_window_id: None,
+            pet_id: Some("custom:test".to_string()),
+            pet_state: Some(PetAnimationState::Running),
+            notification_badge_count: Some(1),
+            message: None,
+        };
+
+        let value = serde_json::to_value(status).expect("status serializes");
+        assert!(value.get("captureFPS").is_some());
+        assert!(value.get("renderFPS").is_some());
+        assert!(value.get("petID").is_some());
+        assert!(value.get("petId").is_none());
+        assert!(value.get("crop").is_none());
+    }
 }

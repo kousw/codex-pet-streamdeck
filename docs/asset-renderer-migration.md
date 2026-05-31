@@ -139,7 +139,7 @@ Example:
 
 ```json
 {
-  "petId": "custom:emilia",
+  "petID": "custom:emilia",
   "state": "running",
   "notificationBadgeCount": 1,
   "message": "Running command",
@@ -290,7 +290,7 @@ data:image/png;base64,...
   "status": "ok",
   "source": "asset-renderer",
   "stateSource": "codex-session",
-  "petId": "custom:emilia",
+  "petID": "custom:emilia",
   "petState": "running",
   "renderFPS": 5,
   "updatedAt": "2026-05-31T00:00:00Z"
