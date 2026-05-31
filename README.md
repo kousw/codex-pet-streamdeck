@@ -20,6 +20,7 @@ This is usable as a local preview, but it is not packaged as a polished public r
 
 - Works on macOS with the Codex desktop app and Elgato Stream Deck.
 - Uses a native Swift helper for local pet rendering.
+- Includes an experimental Rust renderer daemon intended to become the cross-platform rendering core.
 - Uses a Stream Deck SDK plugin for display.
 - Defaults to `10fps` in asset-renderer mode so the Stream Deck samples Codex's shortest pet animation frames closely. The Stream Deck plugin reads the helper's `status.json` and automatically adjusts its polling interval to the configured FPS.
 - Does not require macOS Screen Recording permission in the default `render-assets` mode.
@@ -28,6 +29,18 @@ This is usable as a local preview, but it is not packaged as a polished public r
 
 The asset renderer migration plan is documented in
 [Asset renderer migration](docs/asset-renderer-migration.md).
+
+## Renderer Direction
+
+The current installed path still uses the Swift helper. The new
+`renderer-rust/` prototype is the candidate cross-platform renderer core:
+
+- it renders Codex-compatible `pet.json` + `spritesheet.webp` assets;
+- it writes the same `latest.png`, `latest-data-url.txt`, and `status.json`
+  contract consumed by the Stream Deck plugin;
+- it can also expose local HTTP endpoints for future display adapters.
+
+Stream Deck should remain a display adapter, not the owner of rendering.
 
 ## Requirements
 
