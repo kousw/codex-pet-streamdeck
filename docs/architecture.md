@@ -4,7 +4,8 @@ Date: 2026-05-03
 
 ## Position
 
-The architecture is sound if we treat this as a live frame pipeline, not as a pet asset converter.
+The original architecture was sound for the first proof of concept if we treat
+it as a live frame pipeline, not as a pet asset converter.
 
 The core product should be:
 
@@ -12,12 +13,31 @@ The core product should be:
 Codex overlay/window -> macOS capture helper -> frame transport -> Stream Deck plugin -> setImage
 ```
 
+Update, 2026-05-31: the preferred next architecture is no longer capture-first.
+The capture pipeline should remain as a fallback, but the default path should
+move toward local asset rendering:
+
+```text
+Codex local state + pet spritesheet -> asset renderer -> frame transport -> Stream Deck plugin -> setImage
+```
+
+For exact live motion, an optional local DevTools bridge can read the Codex
+overlay's current sprite row/column and notification badge count when Codex is
+launched with `--remote-debugging-port`. That bridge writes the same
+`~/.codex/pet-streamdeck-state.json` override consumed by the Swift renderer.
+
+See [Asset renderer migration](asset-renderer-migration.md). That plan is
+informed by [lkuczborski/WatchPet](https://github.com/lkuczborski/WatchPet),
+which renders Codex pet spritesheets on Apple Watch through a local bridge
+instead of streaming captured pixels.
+
 The important design choice is to keep the capture implementation, frame delivery, and Stream Deck action logic separate from the start. The first prototype can be small, but it should still respect these boundaries.
 
 ## Design Principles
 
-- Capture rendered output, not Codex internals.
+- Render local pet assets by default; use capture only as a fallback for exact rendered output.
 - Keep Codex app internals as diagnostics only; DOM selectors and bundle filenames are not stable APIs.
+- Treat Electron remote-debugging sync as an optional developer feature, not as the default public path.
 - Make the capture helper independently runnable and debuggable.
 - Make the Stream Deck plugin consume frames through a narrow interface.
 - Prefer replaceable transport over tightly coupling the plugin to the capture implementation.
@@ -154,7 +174,7 @@ Recommended frame output:
 
 - `144x144` PNG for standard key mode.
 - Transparent or black letterbox depending on what looks better on hardware.
-- `8fps` default.
+- `10fps` asset-renderer default to sample Codex's shortest `110ms` avatar frames.
 - `15fps` practical upper target unless hardware testing says otherwise.
 
 The helper should prepare the final key-sized frame before the plugin sees it. The plugin should avoid per-frame crop/scale work so Stream Deck update cost stays predictable.
@@ -237,25 +257,25 @@ docs/
 
 Recommended order:
 
-1. `capture-macos`: window discovery CLI. Done.
-2. `capture-macos`: one-shot screenshot/crop to PNG. In progress with a ScreenCaptureKit snapshot path.
-3. `capture-macos`: looped frame writer with `status.json`.
-4. `streamdeck-plugin`: static placeholder action.
-5. `streamdeck-plugin`: temp-file frame reader.
-6. `streamdeck-plugin`: settings for FPS and crop mode.
-7. Replace temp-file polling with WebSocket if needed.
-8. Package helper lifecycle into the plugin.
+1. `capture-macos`: asset renderer mode that loads Codex-compatible pet spritesheets.
+2. `capture-macos`: best-effort Codex state inference and explicit `PET_STATE` override.
+3. `capture-macos`: atomic `latest-data-url.txt`, `latest.png`, and `status.json` writer.
+4. `streamdeck-plugin`: data URL reader and `setImage` action.
+5. `Codex Pet` menu bar app: helper lifecycle, FPS presets, config access, and fallback crop tuning.
+6. `capture-overlay`: retained as an explicit fallback for pixel-level overlay mirroring.
+7. Package signed helper apps and `.streamDeckPlugin` artifacts for public releases.
+8. Replace temp-file polling with a push channel only if hardware testing shows it is needed.
 
 ## Architecture Verdict
 
-The architecture is good, with one adjustment: do not let the Stream Deck plugin own capture. Make capture a native helper with a small frame contract.
+The architecture is good, with one adjustment: do not let the Stream Deck plugin own rendering or capture. Make the native helper responsible for producing a finished `144x144` frame and keep the plugin as a small Stream Deck adapter.
 
-That gives us a structured foundation while still allowing a quick PoC. The PoC should validate the riskiest unknowns, especially whether the Codex pet overlay appears as an independent macOS window and whether ScreenCaptureKit captures it reliably.
+The default helper now renders pet assets locally, which removes the riskiest capture-path concerns from normal use. The capture path remains useful as a fallback when exact rendered overlay mirroring matters.
 
-Performance adjustment: treat temp-file PNG polling as a milestone, not the destination. Once capture is reliable, move steady-state frame delivery to a local push channel and keep image processing inside the native helper.
+Performance adjustment: temp-file data URL polling is acceptable for the current `144x144` renderer because writes are atomic and the plugin skips duplicate payloads. Move steady-state frame delivery to a local push channel only after measuring a real Stream Deck bottleneck.
 
 ## Initial Probe Result
 
 The first window probe found an onscreen Codex layer `3` window with bounds `356x320`, which is likely the pet overlay. This is a good sign for performance because a small overlay window can be captured directly instead of capturing and cropping the full Codex main window.
 
-Screen Recording permission was granted during implementation, and ScreenCaptureKit successfully captured the layer `3` overlay window directly. The helper can now produce a `144x144` Stream Deck-ready PNG from that overlay. The next step is to turn the one-shot frame path into a low-FPS publisher, then replace polling with push transport if needed.
+Screen Recording permission was granted during implementation, and ScreenCaptureKit successfully captured the layer `3` overlay window directly. That proved that overlay mirroring is possible, but the default path now avoids this dependency by rendering the active Codex pet from local assets. The overlay capture path is retained as `capture-overlay` for fallback experiments.

@@ -10,7 +10,7 @@ This is not just an asset conversion problem. The desired behavior is a live mir
 
 ## Current Findings
 
-The practical implementation path is:
+The first practical implementation path was:
 
 1. Capture the Codex pet overlay window or the Codex window region that contains it.
 2. Crop the pet area.
@@ -18,6 +18,13 @@ The practical implementation path is:
 4. Send each frame to Stream Deck with `setImage`.
 
 Animated GIF/WebP files are useful for static asset experiments, but they do not solve live mirroring because Stream Deck plugin APIs do not play animated images through `setImage`.
+
+Update, 2026-05-31: after comparing with the Apple Watch project
+[lkuczborski/WatchPet](https://github.com/lkuczborski/WatchPet), the better
+long-term path is to render Codex pet spritesheets locally and send generated
+PNG data URLs to Stream Deck. This avoids Screen Recording permission, crop
+tuning, and overlay position drift. The capture path remains useful as a
+pixel-perfect fallback when mirroring the exact rendered overlay is required.
 
 ## Local Codex App Facts
 

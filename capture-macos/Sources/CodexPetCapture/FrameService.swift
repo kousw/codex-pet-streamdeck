@@ -25,6 +25,7 @@ final class FrameService {
     private let cropConfiguration: CropConfiguration
     private let outputDirectory: URL
     private let durationSeconds: Double?
+    private let debugLogging: Bool
     private let discovery: WindowDiscovery
     private let snapshotWriter = ScreenCaptureKitSnapshotWriter()
     private let coreGraphicsSnapshotWriter = SnapshotWriter()
@@ -41,7 +42,8 @@ final class FrameService {
         retryIntervalSeconds: Double,
         cropConfiguration: CropConfiguration,
         outputDirectory: String,
-        durationSeconds: Double?
+        durationSeconds: Double?,
+        debugLogging: Bool = false
     ) {
         self.bundleIdentifier = bundleIdentifier
         self.frameMode = frameMode
@@ -51,6 +53,7 @@ final class FrameService {
         self.cropConfiguration = cropConfiguration
         self.outputDirectory = URL(fileURLWithPath: outputDirectory)
         self.durationSeconds = durationSeconds
+        self.debugLogging = debugLogging
         self.discovery = WindowDiscovery(targetBundleIdentifier: bundleIdentifier)
         self.frameRenderer = FrameRenderer(cropConfiguration: cropConfiguration)
     }
@@ -122,8 +125,7 @@ final class FrameService {
         )
         try AtomicFileWriter.writeJSON(status, to: statusPath, statusWriter: statusWriter)
 
-        print("frame \(sequence) -> \(slotPath.path)")
-        fflush(stdout)
+        debug("frame \(sequence) -> \(slotPath.path)")
     }
 
     private func captureWindowImage(windowID: UInt32) async throws -> CGImage {
@@ -162,5 +164,13 @@ final class FrameService {
 
     private func dataURL(forPNGData data: Data) -> String {
         "data:image/png;base64,\(data.base64EncodedString())"
+    }
+
+    private func debug(_ message: String) {
+        guard debugLogging else {
+            return
+        }
+        print(message)
+        fflush(stdout)
     }
 }

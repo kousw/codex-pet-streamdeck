@@ -32,6 +32,7 @@ tmp/
 streamdeck-plugin/**/*.sdPlugin/frames/*.png
 streamdeck-plugin/**/*.sdPlugin/frames/*.webp
 streamdeck-plugin/**/*.sdPlugin/frames/*.gif
+streamdeck-plugin/**/*.sdPlugin/frames/.*.tmp-*
 streamdeck-plugin/**/*.sdPlugin/frames/status.json
 streamdeck-plugin/**/*.sdPlugin/frames/latest-data-url.txt
 

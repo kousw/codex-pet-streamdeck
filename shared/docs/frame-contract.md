@@ -1,6 +1,8 @@
 # Frame Contract
 
-The capture helper and Stream Deck plugin communicate through a narrow frame/status contract.
+The helper and Stream Deck plugin communicate through a narrow frame/status
+contract. The helper may be either the original capture publisher or the planned
+asset renderer.
 
 ## Performance Direction
 
@@ -47,6 +49,10 @@ The publisher rotates through `frame-0.png` to `frame-7.png` for consumers that 
 
 - `captureFPS`: the helper's configured frame rate. The plugin uses this to derive its polling interval.
 - `crop`: the configured pet crop rectangle in reference overlay coordinates.
+
+The asset-renderer path should also write `renderFPS`, `source`, `stateSource`,
+`petId`, `petState`, and optionally `notificationBadgeCount`. During migration
+it should keep writing `captureFPS` for compatibility with the current plugin.
 
 ## Status Values
 

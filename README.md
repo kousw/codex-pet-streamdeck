@@ -1,8 +1,14 @@
 # Codex Pet Stream Deck
 
-Mirror the live Codex app pet overlay onto an Elgato Stream Deck key.
+Display the Codex app pet on an Elgato Stream Deck key.
 
-This project captures the small macOS overlay window rendered by the Codex desktop app, crops it to the pet, writes a Stream Deck-ready frame, and lets a Stream Deck plugin display that frame on a key.
+The default path renders frames locally from Codex-compatible pet spritesheets
+and best-effort Codex activity state. The Stream Deck plugin reads those frames
+through a small data URL/status contract and displays them with `setImage`.
+
+The original macOS overlay capture path is still available as an explicit
+fallback for experiments that need pixel-level mirroring of the rendered Codex
+overlay.
 
 ## Demo
 
@@ -13,10 +19,15 @@ This project captures the small macOS overlay window rendered by the Codex deskt
 This is usable as a local preview, but it is not packaged as a polished public release yet.
 
 - Works on macOS with the Codex desktop app and Elgato Stream Deck.
-- Uses a native Swift helper for capture.
+- Uses a native Swift helper for local pet rendering.
 - Uses a Stream Deck SDK plugin for display.
-- Defaults to `1fps` for reliability. The Stream Deck plugin reads the helper's `status.json` and automatically adjusts its polling interval to the configured capture FPS.
-- Uses CoreGraphics window snapshots for the current steady-state path. This API is deprecated, but it is currently more stable for this PoC than repeated ScreenCaptureKit one-shot captures.
+- Defaults to `10fps` in asset-renderer mode so the Stream Deck samples Codex's shortest pet animation frames closely. The Stream Deck plugin reads the helper's `status.json` and automatically adjusts its polling interval to the configured FPS.
+- Does not require macOS Screen Recording permission in the default `render-assets` mode.
+- Can follow Codex's exact live avatar frame and notification badge when Codex is launched with an Electron remote debugging port.
+- Can still use the old CoreGraphics capture path with `HELPER_MODE="capture-overlay"` when needed.
+
+The asset renderer migration plan is documented in
+[Asset renderer migration](docs/asset-renderer-migration.md).
 
 ## Requirements
 
@@ -24,7 +35,9 @@ This is usable as a local preview, but it is not packaged as a polished public r
 - Swift 6 toolchain.
 - Codex desktop app.
 - Elgato Stream Deck app 6.5 or newer.
-- macOS Screen Recording permission for the capture helper or the app that launches it.
+- A Codex-compatible custom pet under `~/.codex/pets/<pet-id>` for the current default renderer.
+- macOS Screen Recording permission only if you enable the `capture-overlay` fallback.
+- Optional: Codex launched with `--remote-debugging-port=9222` for exact live frame and notification badge sync.
 
 ## Build From Source
 
@@ -60,7 +73,8 @@ open streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/latest.png
 
 If `status.sh` reports `status: "ok"` and `latest.png` shows the pet, the capture helper is working. If the Stream Deck key still does not update, remove and re-add the `Live Pet` action and restart the Stream Deck app.
 
-If macOS blocks capture, open:
+Default `render-assets` mode does not need Screen Recording permission. If you
+switch to the `capture-overlay` fallback and macOS blocks capture, open:
 
 ```text
 System Settings > Privacy & Security > Screen & System Audio Recording
@@ -68,7 +82,7 @@ System Settings > Privacy & Security > Screen & System Audio Recording
 
 Grant access to the helper process if it appears there. If you are running the helper manually from Terminal, Ghostty, iTerm, Warp, or another shell, grant access to that shell app and restart it if macOS asks.
 
-For the normal installed path, grant access to `Codex Pet Capture`. It is generated under `dist/Codex Pet Capture.app` so macOS can show it as an app in the Screen Recording permission list.
+For the fallback installed path, grant access to `Codex Pet Capture`. It is generated under `dist/Codex Pet Capture.app` so macOS can show it as an app in the Screen Recording permission list.
 
 If you rebuild the app bundles, macOS may treat the ad-hoc signed helper as changed. Re-run `./scripts/request-screen-recording.sh`, toggle `Codex Pet Capture` off/on in Screen Recording settings if needed, then restart the helper.
 
@@ -102,7 +116,30 @@ Use the full build only when the capture helper changed:
 
 ## Manual Test
 
-Run the helper directly for a short test:
+Run the default asset renderer directly for a short test:
+
+```sh
+cd capture-macos
+swift run codex-pet-capture \
+  --render-assets \
+  --pet-id <pet-id> \
+  --pet-state idle \
+  --fps 10 \
+  --duration 3 \
+  --output-dir ../streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames
+```
+
+The generated frame should appear at:
+
+```text
+streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/latest.png
+```
+
+The status file should report `source: "asset-renderer"`.
+
+### Capture Fallback Test
+
+Run the old capture helper directly for a short test:
 
 ```sh
 cd capture-macos
@@ -130,14 +167,18 @@ streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames/latest.png
 ./scripts/open-menubar.sh
 ./scripts/request-screen-recording.sh
 ./scripts/reset-screen-recording.sh
-./scripts/set-fps.sh 1
+./scripts/set-fps.sh 10
+./scripts/set-debug.sh 1
+./scripts/open-codex-debug.sh
+./scripts/start-avatar-sync.sh 9222
+./scripts/stop-avatar-sync.sh
 ./scripts/clean-artifacts.sh
 ./scripts/uninstall.sh
 ```
 
 `status.sh` prints the LaunchAgent state, the latest frame status, and recent helper errors.
 
-Capture FPS is configurable. The default is `1` for Stream Deck plugin stability, but other integrations can raise it:
+Frame FPS is configurable. The default is `10` for the asset renderer because Codex's pet animation has frames as short as `110ms`. For lower CPU or more conservative Stream Deck behavior, reduce it:
 
 ```sh
 ./scripts/set-fps.sh 5
@@ -146,6 +187,58 @@ Capture FPS is configurable. The default is `1` for Stream Deck plugin stability
 ```
 
 The helper clamps fps to `1...15`.
+
+The asset renderer follows Codex's local avatar timing: `running`, `waiting`,
+`failed`, and `review` play their state row three times, then fall back to the
+slow idle loop until the state changes again. At very low FPS, some short frames
+will be skipped even though the timeline is correct.
+
+## Exact Live Sync
+
+By default, the helper infers Codex activity from local state and session logs.
+That keeps the default path permission-free, but it is best-effort and can differ
+from the Codex overlay's exact transient motion.
+
+For closer live sync, launch Codex with Electron remote debugging enabled:
+
+```sh
+./scripts/open-codex-debug.sh
+curl http://127.0.0.1:9222/json/version
+```
+
+Then start the avatar sync bridge:
+
+```sh
+./scripts/start-avatar-sync.sh 9222
+./scripts/stop-helper.sh
+./scripts/start-helper.sh
+```
+
+The bridge reads the live overlay's `.codex-avatar-root` `background-position`
+through DevTools and writes the current sprite row/column to:
+
+```text
+~/.codex/pet-streamdeck-state.json
+```
+
+When active, `status.json` reports:
+
+```json
+{
+  "stateSource": "codex-debug-overlay",
+  "notificationBadgeCount": 1
+}
+```
+
+In this mode, the helper renders the same sprite row/column as the Codex overlay
+and draws the small notification badge when the overlay exposes one.
+
+Limitations:
+
+- Codex must be launched with `--remote-debugging-port`; a normal Dock launch does not expose the live overlay DOM.
+- macOS Dock items cannot attach arbitrary launch arguments to an existing `.app`, so use `./scripts/open-codex-debug.sh` or an external launcher if you want debug-port startup.
+- The DevTools bridge is local-only and talks to `127.0.0.1`, but remote debugging should still be treated as a development feature.
+- If the bridge stops or Codex restarts without the debug port, the helper falls back to the best-effort local state/session renderer.
 
 The menu bar controller appears as `Codex Pet` in the macOS menu bar. It provides:
 
@@ -167,8 +260,12 @@ The installed config lives at:
 Supported settings:
 
 ```sh
-FPS="1"
+FPS="10"
 RETRY_INTERVAL="2"
+HELPER_MODE="render-assets"
+DEBUG="0"
+PET_ID=""
+PET_STATE=""
 FRAME_MODE="pet"
 CAPTURE_ENGINE="core-graphics"
 CROP_X="248"
@@ -177,9 +274,18 @@ CROP_WIDTH="89"
 CROP_HEIGHT="89"
 ```
 
-`FPS` is clamped to `1...15`. The menu bar app can update FPS and crop values, then restarts the helper so the change takes effect.
+`FPS` is clamped to `1...15`. `HELPER_MODE` supports `render-assets` and
+`capture-overlay`. `PET_ID` and `PET_STATE` are optional renderer overrides;
+leave them empty for best-effort auto detection. `PET_STATE` may be `idle`,
+`running`, `waiting`, `failed`, or `review`.
 
-For visual crop tuning, open:
+Set `DEBUG="1"` to keep per-frame helper logs in
+`~/Library/Logs/codex-pet-streamdeck/helper.log`. Leave it off for normal use,
+especially at `10fps`.
+
+The menu bar app can update FPS and capture fallback crop values, then restarts the helper so the change takes effect.
+
+For visual crop tuning in `capture-overlay` fallback mode, open:
 
 ```text
 Codex Pet menu bar icon > Settings > Crop Tuner
@@ -216,7 +322,7 @@ If frames stop updating, run:
 ./scripts/status.sh
 ```
 
-Common causes are missing Screen Recording permission, Codex not showing the pet overlay, or the Stream Deck app needing a restart after plugin changes.
+Common causes are missing custom pet assets, stale status output, or the Stream Deck app needing a restart after plugin changes. In `capture-overlay` fallback mode, missing Screen Recording permission or a hidden Codex overlay can also stop updates.
 
 If the pet is visible in `latest.png` but not on the key, the capture helper is working and the issue is likely in the Stream Deck plugin/runtime side.
 
@@ -231,5 +337,6 @@ If the pet is visible in `latest.png` but not on the key, the capture helper is 
 
 - [Research notes](docs/research.md)
 - [Architecture](docs/architecture.md)
+- [Asset renderer migration](docs/asset-renderer-migration.md)
 - [Public readiness](docs/public-readiness.md)
 - [Security review](docs/security-review.md)

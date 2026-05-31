@@ -7,7 +7,7 @@
   "properties": {
     "version": {
       "type": "integer",
-      "const": 1
+      "enum": [1, 2]
     },
     "status": {
       "type": "string",
@@ -17,6 +17,7 @@
         "window-not-found",
         "screen-recording-denied",
         "capture-failed",
+        "render-failed",
         "stale-frame",
         "helper-not-running"
       ]
@@ -41,12 +42,36 @@
     },
     "captureMode": {
       "type": "string",
-      "enum": ["pet", "pet-with-bubble", "debug-wide"]
+      "enum": ["pet", "pet-with-bubble", "debug-wide", "render-assets"]
     },
     "captureFPS": {
       "type": "number",
       "minimum": 1,
       "maximum": 15
+    },
+    "renderFPS": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 15
+    },
+    "source": {
+      "type": "string",
+      "enum": ["asset-renderer", "capture"]
+    },
+    "stateSource": {
+      "type": "string",
+      "enum": ["cli", "override-file", "codex-session", "default"]
+    },
+    "petID": {
+      "type": "string"
+    },
+    "petState": {
+      "type": "string",
+      "enum": ["idle", "running", "waiting", "failed", "review"]
+    },
+    "notificationBadgeCount": {
+      "type": "integer",
+      "minimum": 1
     },
     "crop": {
       "type": "object",

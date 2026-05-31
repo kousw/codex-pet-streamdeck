@@ -9,6 +9,9 @@ private struct FrameStatus: Decodable {
     let updatedAt: String
     let frameSequence: Int?
     let captureFPS: Double?
+    let renderFPS: Double?
+    let source: String?
+    let petState: String?
     let targetWindowID: UInt32?
     let message: String?
 }
@@ -16,6 +19,9 @@ private struct FrameStatus: Decodable {
 private struct CaptureConfig {
     var fps: Double = 1
     var retryInterval: Double = 2
+    var helperMode: String = "render-assets"
+    var petID: String = ""
+    var petState: String = ""
     var frameMode: String = "pet"
     var captureEngine: String = "core-graphics"
     var cropX: Double = 248
@@ -372,7 +378,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate, NSWindowDelegate
         let parent = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
         let menu = NSMenu()
 
-        let fpsParent = NSMenuItem(title: "Capture FPS", action: nil, keyEquivalent: "")
+        let fpsParent = NSMenuItem(title: "Frame FPS", action: nil, keyEquivalent: "")
         let fpsMenu = NSMenu()
         fpsMenuItems = [1, 2, 5, 8, 10, 15].map { value in
             let item = NSMenuItem(title: formatFPS(Double(value)), action: #selector(setFPS(_:)), keyEquivalent: "")
@@ -384,11 +390,11 @@ final class MenuBarController: NSObject, NSApplicationDelegate, NSWindowDelegate
         fpsParent.submenu = fpsMenu
         menu.addItem(fpsParent)
 
-        let cropTuner = NSMenuItem(title: "Crop Tuner", action: #selector(openCropTuner), keyEquivalent: "")
+        let cropTuner = NSMenuItem(title: "Capture Fallback Crop Tuner", action: #selector(openCropTuner), keyEquivalent: "")
         cropTuner.target = self
         menu.addItem(cropTuner)
 
-        let note = NSMenuItem(title: "Crop changes apply after saving in the tuner", action: nil, keyEquivalent: "")
+        let note = NSMenuItem(title: "Crop applies only when HELPER_MODE is capture-overlay", action: nil, keyEquivalent: "")
         note.isEnabled = false
         menu.addItem(note)
 
@@ -486,10 +492,15 @@ final class MenuBarController: NSObject, NSApplicationDelegate, NSWindowDelegate
             return
         }
 
-        let fps = status.captureFPS.map { formatFPS($0) } ?? "unknown"
+        let fps = (status.renderFPS ?? status.captureFPS).map { formatFPS($0) } ?? "unknown"
+        let source = status.source ?? "capture"
         statusLine.title = "Helper: \(helperState), frame: \(status.status), fps: \(fps)"
         frameLine.title = "Frame: \(status.frameSequence.map(String.init) ?? "unknown")"
-        windowLine.title = "Window: \(status.targetWindowID.map(String.init) ?? "unknown")"
+        if source == "asset-renderer" {
+            windowLine.title = "Renderer: \(status.petState ?? "unknown")"
+        } else {
+            windowLine.title = "Window: \(status.targetWindowID.map(String.init) ?? "unknown")"
+        }
         configLine.title = configSummary(config)
         messageLine.title = status.message ?? "Updated: \(status.updatedAt)"
         applyMenuBarIcon(hasIssue: status.status != "ok")
@@ -833,7 +844,12 @@ final class MenuBarController: NSObject, NSApplicationDelegate, NSWindowDelegate
     }
 
     private func configSummary(_ config: CaptureConfig) -> String {
-        "Config: fps \(formatFPS(config.fps)), crop \(formatConfigNumber(config.cropX)),\(formatConfigNumber(config.cropY)) \(formatConfigNumber(config.cropWidth))x\(formatConfigNumber(config.cropHeight))"
+        if config.helperMode == "capture-overlay" {
+            return "Config: capture-overlay, fps \(formatFPS(config.fps)), crop \(formatConfigNumber(config.cropX)),\(formatConfigNumber(config.cropY)) \(formatConfigNumber(config.cropWidth))x\(formatConfigNumber(config.cropHeight))"
+        }
+
+        let state = config.petState.isEmpty ? "auto" : config.petState
+        return "Config: render-assets, fps \(formatFPS(config.fps)), state \(state)"
     }
 
     private func formatFPS(_ value: Double) -> String {
@@ -879,6 +895,12 @@ final class MenuBarController: NSObject, NSApplicationDelegate, NSWindowDelegate
                 config.fps = Double(value) ?? config.fps
             case "RETRY_INTERVAL":
                 config.retryInterval = Double(value) ?? config.retryInterval
+            case "HELPER_MODE":
+                config.helperMode = value
+            case "PET_ID":
+                config.petID = value
+            case "PET_STATE":
+                config.petState = value
             case "FRAME_MODE":
                 config.frameMode = value
             case "CAPTURE_ENGINE":
@@ -898,6 +920,9 @@ final class MenuBarController: NSObject, NSApplicationDelegate, NSWindowDelegate
 
         config.fps = min(max(config.fps, 1), 15)
         config.retryInterval = max(config.retryInterval, 0.25)
+        if config.helperMode != "render-assets" && config.helperMode != "capture-overlay" {
+            config.helperMode = "render-assets"
+        }
         config.cropX = max(config.cropX, 0)
         config.cropY = max(config.cropY, 0)
         config.cropWidth = max(config.cropWidth, 8)
@@ -910,6 +935,9 @@ final class MenuBarController: NSObject, NSApplicationDelegate, NSWindowDelegate
         let content = """
         FPS="\(formatConfigNumber(config.fps))"
         RETRY_INTERVAL="\(formatConfigNumber(config.retryInterval))"
+        HELPER_MODE="\(config.helperMode)"
+        PET_ID="\(config.petID)"
+        PET_STATE="\(config.petState)"
         FRAME_MODE="\(config.frameMode)"
         CAPTURE_ENGINE="\(config.captureEngine)"
         CROP_X="\(formatConfigNumber(config.cropX))"

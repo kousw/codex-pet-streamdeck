@@ -4,6 +4,11 @@ await run()
 
 private func run() async {
     let configuration = ProbeConfiguration(arguments: CommandLine.arguments)
+    if configuration.renderAssets {
+        await runAssetRenderService(configuration: configuration)
+        return
+    }
+
     let screenRecordingAccess = ScreenRecordingAccess(
         isGranted: ScreenRecordingPermission.isGranted(requestIfMissing: configuration.requestScreenRecordingAccess)
     )
@@ -46,6 +51,24 @@ private func run() async {
         windows: windows,
         screenRecordingAccess: screenRecordingAccess
     )
+}
+
+private func runAssetRenderService(configuration: ProbeConfiguration) async {
+    do {
+        try await AssetRenderService(
+            fps: configuration.fps,
+            retryIntervalSeconds: configuration.retryIntervalSeconds,
+            outputDirectory: configuration.outputDirectory,
+            durationSeconds: configuration.durationSeconds,
+            petID: configuration.petID,
+            petState: configuration.petState,
+            debugLogging: configuration.debugLogging
+        ).run()
+        exit(0)
+    } catch {
+        fputs("Asset renderer failed: \(error)\n", stderr)
+        exit(1)
+    }
 }
 
 private func runCropPreview(
@@ -107,7 +130,8 @@ private func runService(
             retryIntervalSeconds: configuration.retryIntervalSeconds,
             cropConfiguration: configuration.cropConfiguration,
             outputDirectory: configuration.outputDirectory,
-            durationSeconds: configuration.durationSeconds
+            durationSeconds: configuration.durationSeconds,
+            debugLogging: configuration.debugLogging
         ).run()
         exit(0)
     } catch {
@@ -163,7 +187,8 @@ private func runPublisher(
             captureEngine: configuration.captureEngine,
             fps: configuration.fps,
             outputDirectory: configuration.outputDirectory,
-            durationSeconds: configuration.durationSeconds
+            durationSeconds: configuration.durationSeconds,
+            debugLogging: configuration.debugLogging
         ).run()
         exit(0)
     } catch {

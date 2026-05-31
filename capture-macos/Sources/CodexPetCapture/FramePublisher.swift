@@ -21,6 +21,7 @@ final class FramePublisher {
     private let fps: Double
     private let outputDirectory: URL
     private let durationSeconds: Double?
+    private let debugLogging: Bool
     private let snapshotWriter = ScreenCaptureKitSnapshotWriter()
     private let coreGraphicsSnapshotWriter = SnapshotWriter()
     private let frameRenderer = FrameRenderer()
@@ -33,7 +34,8 @@ final class FramePublisher {
         captureEngine: CaptureEngine,
         fps: Double,
         outputDirectory: String,
-        durationSeconds: Double?
+        durationSeconds: Double?,
+        debugLogging: Bool = false
     ) {
         self.windowID = windowID
         self.frameMode = frameMode
@@ -41,6 +43,7 @@ final class FramePublisher {
         self.fps = fps
         self.outputDirectory = URL(fileURLWithPath: outputDirectory)
         self.durationSeconds = durationSeconds
+        self.debugLogging = debugLogging
     }
 
     func run() async throws {
@@ -80,7 +83,7 @@ final class FramePublisher {
             )
             try AtomicFileWriter.writeJSON(status, to: statusPath, statusWriter: statusWriter)
 
-            print("frame \(sequence) -> \(slotPath.path)")
+            debug("frame \(sequence) -> \(slotPath.path)")
             sequence += 1
 
             if let durationSeconds, Date().timeIntervalSince(startedAt) >= durationSeconds {
@@ -103,5 +106,13 @@ final class FramePublisher {
     private func dataURL(forPNGAt url: URL) throws -> String {
         let data = try Data(contentsOf: url)
         return "data:image/png;base64,\(data.base64EncodedString())"
+    }
+
+    private func debug(_ message: String) {
+        guard debugLogging else {
+            return
+        }
+        print(message)
+        fflush(stdout)
     }
 }

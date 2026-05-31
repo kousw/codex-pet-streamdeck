@@ -2,29 +2,26 @@
 set -euo pipefail
 
 if [ "$#" -ne 1 ]; then
-echo "Usage: ./scripts/set-fps.sh <fps>"
-  echo "Example: ./scripts/set-fps.sh 10"
-  echo "Allowed range: 1..15"
+  echo "Usage: ./scripts/set-debug.sh <0|1>"
+  echo "Example: ./scripts/set-debug.sh 1"
   exit 1
 fi
 
-REQUESTED_FPS="$1"
-case "$REQUESTED_FPS" in
-  ''|*[!0-9.]*)
-    echo "FPS must be a number between 1 and 15."
+case "$1" in
+  0|1|true|false)
+    REQUESTED_DEBUG="$1"
+    ;;
+  *)
+    echo "Debug must be 0, 1, true, or false."
     exit 1
     ;;
 esac
-
-awk -v fps="$REQUESTED_FPS" 'BEGIN { if (fps < 1 || fps > 15) exit 1 }' || {
-  echo "FPS must be between 1 and 15."
-  exit 1
-}
 
 CONFIG_DIR="$HOME/Library/Application Support/Codex Pet StreamDeck"
 CONFIG_FILE="$CONFIG_DIR/config.env"
 mkdir -p "$CONFIG_DIR"
 
+FPS="10"
 RETRY_INTERVAL="2"
 HELPER_MODE="render-assets"
 DEBUG="0"
@@ -42,8 +39,10 @@ if [ -f "$CONFIG_FILE" ]; then
   source "$CONFIG_FILE"
 fi
 
+DEBUG="$REQUESTED_DEBUG"
+
 cat > "$CONFIG_FILE" <<CONFIG
-FPS="$REQUESTED_FPS"
+FPS="$FPS"
 RETRY_INTERVAL="$RETRY_INTERVAL"
 HELPER_MODE="$HELPER_MODE"
 DEBUG="$DEBUG"
@@ -57,7 +56,7 @@ CROP_WIDTH="$CROP_WIDTH"
 CROP_HEIGHT="$CROP_HEIGHT"
 CONFIG
 
-echo "Set capture FPS to $REQUESTED_FPS."
+echo "Set debug logging to $DEBUG."
 echo "Restart the helper to apply it:"
 echo "  ./scripts/stop-helper.sh"
 echo "  ./scripts/start-helper.sh"

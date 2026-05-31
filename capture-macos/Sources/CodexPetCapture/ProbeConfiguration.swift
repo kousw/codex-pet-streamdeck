@@ -13,6 +13,7 @@ struct ProbeConfiguration {
     let publishBest: Bool
     let publishWindowID: UInt32?
     let serve: Bool
+    let renderAssets: Bool
     let frameMode: FrameMode
     let captureEngine: CaptureEngine
     let fps: Double
@@ -22,8 +23,12 @@ struct ProbeConfiguration {
     let outputDirectory: String
     let outputPath: String?
     let requestScreenRecordingAccess: Bool
+    let petID: String?
+    let petState: PetAnimationState?
+    let debugLogging: Bool
 
     init(arguments: [String]) {
+        let renderAssetsFlag = arguments.contains("--render-assets")
         self.bundleIdentifier = Self.value(after: "--bundle-id", in: arguments)
             ?? "com.openai.codex"
         self.snapshotBest = arguments.contains("--snapshot-best")
@@ -42,6 +47,7 @@ struct ProbeConfiguration {
         self.publishWindowID = Self.value(after: "--publish-window-id", in: arguments)
             .flatMap(UInt32.init)
         self.serve = arguments.contains("--serve")
+        self.renderAssets = renderAssetsFlag
         self.frameMode = Self.value(after: "--frame-mode", in: arguments)
             .flatMap(FrameMode.init(rawValue:))
             ?? .pet
@@ -51,7 +57,7 @@ struct ProbeConfiguration {
         self.fps = Self.value(after: "--fps", in: arguments)
             .flatMap(Double.init)
             .map { min(max($0, 1), 15) }
-            ?? 1
+            ?? (renderAssetsFlag ? 10 : 1)
         self.retryIntervalSeconds = Self.value(after: "--retry-interval", in: arguments)
             .flatMap(Double.init)
             .map { max($0, 0.25) }
@@ -69,6 +75,10 @@ struct ProbeConfiguration {
             ?? "/tmp/codex-pet-streamdeck"
         self.outputPath = Self.value(after: "--output", in: arguments)
         self.requestScreenRecordingAccess = arguments.contains("--request-screen-recording-access")
+        self.petID = Self.value(after: "--pet-id", in: arguments)
+        self.petState = Self.value(after: "--pet-state", in: arguments)
+            .flatMap(PetAnimationState.init(rawValue:))
+        self.debugLogging = arguments.contains("--debug")
     }
 
     private static func value(after flag: String, in arguments: [String]) -> String? {

@@ -10,7 +10,7 @@ Initial action:
 
 Performance target:
 
-- Start with conservative update rates. The plugin reads `frames/status.json`, derives its polling interval from `captureFPS`, and uses a Web Worker timer with a main-thread timer fallback.
+- Start with moderate update rates. The plugin reads `frames/status.json`, derives its polling interval from `captureFPS`, and uses a Web Worker timer with a main-thread timer fallback.
 - Avoid repeated expensive image transforms in the plugin.
 - Move from temp-file polling to push transport once capture behavior is proven.
 
@@ -32,11 +32,11 @@ Then restart Stream Deck. If you only want to work on the plugin, copying or sym
 
 ## Try It
 
-Start the capture helper:
+Start the asset renderer:
 
 ```sh
 cd ../capture-macos
-swift run codex-pet-capture --serve --frame-mode pet --capture-engine core-graphics --fps 1 --output-dir ../streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames
+swift run codex-pet-capture --render-assets --pet-state idle --fps 10 --output-dir ../streamdeck-plugin/com.kousw.codex-pet.sdPlugin/frames
 ```
 
 In Stream Deck, add the `Codex -> Live Pet` action to a key.
@@ -51,4 +51,9 @@ The plugin reads `frames/latest-data-url.txt` with `XMLHttpRequest`, then sends 
 
 `fetch()` was avoided because the Stream Deck plugin runtime failed local file reads in testing. The refresh loop uses a Web Worker timer because normal HTML timers may be throttled or paused by the Stream Deck runtime.
 
-The plugin skips duplicate image payloads per key, so raising capture FPS does not repeatedly send identical frames. The conservative public default is still `1fps`; `5fps` is a reasonable local test value, and `8fps` is closer to the Codex pet's faster running animations.
+The plugin skips duplicate image payloads per key, so raising renderer FPS does not repeatedly send identical frames. The default `10fps` samples Codex's shortest `110ms` avatar frames closely. Lower values such as `1fps` or `5fps` are still useful when minimizing updates matters more than animation fidelity.
+
+Exact live motion and notification badges are prepared by the helper side. When
+`status.json` reports `stateSource: "codex-debug-overlay"`, the helper is
+consuming Codex's local DevTools overlay frame. The Stream Deck plugin still
+only sees the final data URL frame.

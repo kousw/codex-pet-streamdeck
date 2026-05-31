@@ -95,7 +95,7 @@ if [ "$BUILD_MODE" = "all" ] || [ "$BUILD_MODE" = "--capture-only" ]; then
     "codex-pet-capture" \
     "com.kousw.codex-pet-capture" \
     "Codex Pet Capture" \
-    "Codex Pet Capture needs Screen Recording permission to mirror the Codex pet overlay to Stream Deck."
+    "Codex Pet Capture needs Screen Recording permission only when using the capture-overlay fallback."
 fi
 
 if [ "$BUILD_MODE" = "all" ] || [ "$BUILD_MODE" = "--menubar-only" ]; then
@@ -105,7 +105,7 @@ if [ "$BUILD_MODE" = "all" ] || [ "$BUILD_MODE" = "--menubar-only" ]; then
     "codex-pet-menubar" \
     "com.kousw.codex-pet-menubar" \
     "Codex Pet" \
-    "Codex Pet may open helper tools that need Screen Recording permission."
+    "Codex Pet may open capture fallback tools that need Screen Recording permission."
 fi
 
 if [ "$BUILD_MODE" = "all" ] || [ "$BUILD_MODE" = "--capture-only" ]; then

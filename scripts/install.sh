@@ -29,8 +29,12 @@ fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
   cat > "$CONFIG_FILE" <<CONFIG
-FPS="1"
+FPS="10"
 RETRY_INTERVAL="2"
+HELPER_MODE="render-assets"
+DEBUG="0"
+PET_ID=""
+PET_STATE=""
 FRAME_MODE="pet"
 CAPTURE_ENGINE="core-graphics"
 CROP_X="248"
@@ -75,11 +79,9 @@ echo
 echo "Next:"
 echo "  ./scripts/start-helper.sh"
 echo "  ./scripts/open-menubar.sh"
-echo "  ./scripts/set-fps.sh 1"
+echo "  ./scripts/set-fps.sh 10"
 echo "  Restart Stream Deck, then add the Codex > Live Pet action."
 echo
-echo "If macOS blocks capture, grant Screen Recording to the helper launcher in"
-echo "System Settings > Privacy & Security > Screen & System Audio Recording."
-echo
-echo "If Codex Pet Capture is not listed there yet, run:"
+echo "The default asset-renderer mode does not need Screen Recording permission."
+echo "If you switch HELPER_MODE to capture-overlay, run:"
 echo "  ./scripts/request-screen-recording.sh"
